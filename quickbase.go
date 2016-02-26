@@ -62,6 +62,9 @@ type Ticket struct {
 	// will include this Apptoken
 }
 
+func CreateTicket(ticketStr string, url) ticket Ticket {
+	return Ticket{ticketStr, "", url, ""}
+}
 // Authenticate authenticates a user to QuickBase; it's required
 // before executing any other API call.  The username and password
 // arguments are as documented at
