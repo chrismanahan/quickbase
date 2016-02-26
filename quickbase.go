@@ -62,7 +62,7 @@ type Ticket struct {
 	// will include this Apptoken
 }
 
-func CreateTicket(ticketStr string, url) ticket Ticket {
+func CreateTicket(ticketStr string, url string) ticket Ticket {
 	return Ticket{ticketStr, "", url, ""}
 }
 // Authenticate authenticates a user to QuickBase; it's required
