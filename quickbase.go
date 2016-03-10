@@ -65,6 +65,7 @@ type Ticket struct {
 func CreateTicket(ticketStr string, url string) Ticket {
 	return Ticket{ticketStr, "", url, ""}
 }
+
 // Authenticate authenticates a user to QuickBase; it's required
 // before executing any other API call.  The username and password
 // arguments are as documented at
@@ -75,6 +76,14 @@ func CreateTicket(ticketStr string, url string) Ticket {
 // use a decent URL library to Do the Right Thing.
 func Authenticate(url, username, password string) (ticket Ticket, err error) {
 	doc, err := executeApiCall(url+"db/main", "API_Authenticate", map[string]string{"username": username, "password": password})
+	if err != nil {
+		return ticket, err
+	}
+	return Ticket{doc.SelectNode("", "ticket").GetValue(), doc.SelectNode("", "userid").GetValue(), url, ""}, nil
+}
+
+func AuthenticateWithTicket(url, ticketString string) (ticket Ticket, err error) {
+	doc, err := executeApiCall(url+"db/main", "API_Authenticate", map[string]string{"ticket": ticketString})
 	if err != nil {
 		return ticket, err
 	}
@@ -97,25 +106,44 @@ func executeApiCall(url, api_call string, parameters map[string]string) (doc *xm
 		count++
 	}
 	api_params := make([]apiParam, count)
+	println("params\n")
+
 	i := 0
 	for key, _ := range parameters {
 		api_params[i] = apiParam{xml.Name{"", key}, parameters[key]}
 		i++
 	}
+
+	for val := range api_params {
+		fmt.Printf("vals: %v", val)
+	}
 	req := quickBaseRequest{Params: api_params}
 	xml_req, err := xml.Marshal(req)
+	println(xml_req)
 	if err != nil {
+		print("xml error")
 		return
 	}
 	client := &http.Client{}
 	http_req, err := http.NewRequest("POST", url, bytes.NewReader(xml_req))
 	if err != nil {
+		print("http error")
 		return nil, err
 	}
 	http_req.Header.Add("QUICKBASE-ACTION", api_call)
 	http_req.Header.Add("Content-Type", "application/xml")
+	print("req\n")
+	print(http_req)
 	resp, err := client.Do(http_req)
 	if err != nil {
+		println("resp error")
+		println("status: " + resp.Status)
+		println("header: ")
+		for key, val := range resp.Header {
+			println("key: " + key)
+			fmt.Printf("val: %v", val)
+			println()
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -125,11 +153,13 @@ func executeApiCall(url, api_call string, parameters map[string]string) (doc *xm
 	err = doc.LoadStream(resp.Body, nil)
 	//err = doc.LoadStream(tee, nil)
 	if err != nil {
+		print("xml load error")
 		return nil, err
 	}
 	if errcode := doc.SelectNode("", "errcode").GetValue(); errcode != "0" {
 		//err = fmt.Errorf(doc.SelectNode("", "errtext").GetValue())
 		code, err := strconv.Atoi(errcode)
+		print("doc node error")
 		if err != nil {
 			return nil, err
 		}
@@ -542,7 +572,7 @@ func DoQueryChan(ticket Ticket, dbid, query, clist, slist string) (records chan 
 // http.Response streaming the CSV response.  This can be one of the
 // most efficient ways to retrieve a massive amount of data from
 // QuickBase, with none of the overhead of the XML response format.
-func GenResultsTable(ticket Ticket, dbid, query string, columns []int) (resp *http.Response, err error) {
+func GenResultsTable(ticket Ticket, dbid, query string, columns []int, slist string) (resp *http.Response, err error) {
 	strCols := make([]string, len(columns))
 	for i, col := range columns {
 		strCols[i] = strconv.Itoa(col)
@@ -551,7 +581,7 @@ func GenResultsTable(ticket Ticket, dbid, query string, columns []int) (resp *ht
 	params := map[string]string{
 		"clist":    clist,
 		"options":  "csv",
-		"slist":    "3",
+		"slist":    slist,
 		"ticket":   ticket.ticket,
 		"apptoken": ticket.Apptoken,
 	}
